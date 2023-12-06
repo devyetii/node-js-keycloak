@@ -50,7 +50,7 @@ app.get('/callback', (req, res) => {
 })
 
 app.get("/introspect", (req, res) => {
-    const access_token = getStateKey(access_token);
+    const access_token = getStateKey("access_token");
     const url = new URL(
         `${process.env.KEYCLOAK_BASE}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token/introspect`
     );
@@ -160,6 +160,16 @@ app.get('/register', (req, res) => {
     res.redirect(url);
 })
 
+app.get('/account-settings', (req, res) => {
+    const url = new URL(
+        `${process.env.KEYCLOAK_BASE}/realms/${process.env.KEYCLOAK_REALM}/account`
+    );
+
+    res.header('Authorization', `Bearer ${getStateKey("access_token")}`);
+
+    res.redirect(url);
+})
+
 app.get('/logout', (req, res) => {
     const client_id = process.env.KEYCLOAK_CLIENT_ID;
     const redirect_uri = `http://localhost:${process.env.PORT}/`;
@@ -209,6 +219,7 @@ function buildPage(params) {
     const accessTokenIntrospectView = `<p>Introspect Access Token: ${JSON.stringify(params.latest_introspect)}</p>`;
     const userInfoButton = `<button onclick="window.location.href = '/get-user-info';" ${params.access_token ? "" : "disabled"}>Get User Info</button>`;
     const userInfoView = `<p>User Info: ${JSON.stringify(params.user_info)}</p>`;
+    const accountSettingsButton = `<button onclick="window.location.href = '/account-settings';" ${params.access_token ? "" : "disabled"}>Account Settings</button>`;
     const logoutButton = `<button onclick="window.location.href = '/logout';" ${params.access_token ? "" : "disabled"}>Logout</button>`;
 
     return `
@@ -244,6 +255,10 @@ function buildPage(params) {
                 <br />
                 <div>
                     ${params.user_info ? userInfoView : userInfoButton}
+                </div>
+                <br />
+                <div>
+                    ${params.access_token ? accountSettingsButton : ""}
                 </div>
                 <br />
                 <div>
