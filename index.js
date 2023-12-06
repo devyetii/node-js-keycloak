@@ -1,19 +1,27 @@
 const dotenv = require('dotenv');
 const express = require('express');
+const fs = require('fs');
+const { getState, setStateKey, getStateKey, clearState } = require('./state');
 
 dotenv.config();
 
 const app = express();
 
-let state = {};
+// access /private route group with access token
+const privateRouter = require('./private/routes');
+app.use('/private', privateRouter);
+
+const keycloakPublicKey = fs.readFileSync('./key.pem', 'utf8');
+process.env.KEYCLOAK_REALM_PUBLIC_KEY = keycloakPublicKey;
 
 app.get('/', (req, res) => {
-    res.send(buildPage(state));
+    res.send(buildPage(getState()));
 });
 
 app.get('/login', (req, res) => {
     const client_id = process.env.KEYCLOAK_CLIENT_ID;
     const response_type = 'code';
+    const state = JSON.stringify(req.query)
     const redirect_uri = `http://localhost:${process.env.PORT}/callback`;
     const scope = 'openid';
 
@@ -24,6 +32,7 @@ app.get('/login', (req, res) => {
     url.searchParams.append('client_id', client_id);
     url.searchParams.append('response_type', response_type);
     url.searchParams.append('redirect_uri', redirect_uri);
+    url.searchParams.append('state', state);
     url.searchParams.append('scope', scope);
 
 
@@ -31,14 +40,17 @@ app.get('/login', (req, res) => {
 })
 
 app.get('/callback', (req, res) => {
-    console.log(`from callback: ${req.query}`);
-    if (req.query && req.query.code) state.code = req.query.code;
-    if (req.query && req.query.access_token) state.access_token = req.query.access_token;
-    res.redirect('/');
+    console.log(`from callback, state: ${JSON.stringify(JSON.parse(req.query.state))}`);
+    if (req.query && req.query.code) setStateKey("code", req.query.code)
+    if (req.query && req.query.access_token) setStateKey(access_token = req.query.access_token)
+    
+    // generates infinite redirect loop because token still not set. I'm just demonestrating "state" field
+    // const redirect_url = req.query.state ? JSON.parse(req.query.state).redirect : '/';
+    res.redirect("/");
 })
 
 app.get("/introspect", (req, res) => {
-    const access_token = state.access_token;
+    const access_token = getStateKey(access_token);
     const url = new URL(
         `${process.env.KEYCLOAK_BASE}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token/introspect`
     );
@@ -60,7 +72,7 @@ app.get("/introspect", (req, res) => {
         console.log(`from introspect: ${JSON.stringify(data)}`);
         // The response will contain the user info
         // Use the user info to build a page
-        state.latest_introspect = data;
+        setStateKey("latest_introspect", data);
         res.redirect('/');
     })
     .catch(error => {
@@ -70,7 +82,7 @@ app.get("/introspect", (req, res) => {
 })
 
 app.get('/get-access-token', (req, res) => {
-    const code = state.code;
+    const code = getStateKey("code");
     const client_id = process.env.KEYCLOAK_CLIENT_ID;
     const client_secret = process.env.KEYCLOAK_CLIENT_SECRET;
     const redirect_uri = `http://localhost:${process.env.PORT}/callback`;
@@ -99,9 +111,9 @@ app.get('/get-access-token', (req, res) => {
         // The response will contain an access_token and refresh_token
         // Use the access_token to make a request to the user info endpoint
         console.log(`from get access token response: ${JSON.stringify(data)}`);
-        state.access_token = data.access_token;
-        state.id_token = data.id_token;
-        state.refresh_token = data.refresh_token;
+        setStateKey("access_token", data.access_token);
+        setStateKey("id_token", data.id_token);
+        setStateKey("refresh_token", data.refresh_token);
         res.redirect('/');
     })
     .catch(error => {
@@ -111,7 +123,7 @@ app.get('/get-access-token', (req, res) => {
 })
 
 app.get('/get-user-info', (req, res) => {
-    const access_token = state.access_token;
+    const access_token = getStateKey("access_token");
     const url = new URL(
         `${process.env.KEYCLOAK_BASE}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`
     );
@@ -126,7 +138,7 @@ app.get('/get-user-info', (req, res) => {
         console.log(`from get user info: ${data}`);
         // The response will contain the user info
         // Use the user info to build a page
-        state.user_info = data;
+        setStateKey("user_info", data);
         res.redirect('/');
     })
     .catch(error => {
@@ -148,7 +160,7 @@ app.get('/logout', (req, res) => {
     payload.append('client_id', client_id);
     payload.append('client_secret', process.env.KEYCLOAK_CLIENT_SECRET);
     payload.append('redirect_uri', redirect_uri);
-    payload.append('refresh_token', state.refresh_token);
+    payload.append('refresh_token', getStateKey("refresh_token"));
 
     fetch(url, {
         method: 'POST',
@@ -160,7 +172,7 @@ app.get('/logout', (req, res) => {
     .then(response => response.text())
     .then(response => {
         console.log(`from logout: ${response}`);
-        state = {};
+        clearState();
         res.redirect('/');
     }).catch(error => {
         console.log(error);
@@ -173,7 +185,7 @@ app.listen(process.env.PORT, () => {
 });
 
 function buildPage(params) {
-    const loginButton = `<button onclick="window.location.href = '/login';">Login</button>`;
+    const loginButton = `<button onclick="window.location.href = '/login?redirect=/';">Login</button>`;
     const codeView = `<p>Code: ${params.code}</p>`;
     const accessTokenGetButton = `<button onclick="window.location.href = '/get-access-token';" ${params.code ? "" : "disabled"}>Get Access Token</button>`;
     const accessTokenView = `<p>Access Token: ${params.access_token}</p>`;
@@ -197,6 +209,8 @@ function buildPage(params) {
             <p>Keycloak Realm: ${process.env.KEYCLOAK_REALM}</p>
             <p>Keycloak Client ID: ${process.env.KEYCLOAK_CLIENT_ID}</p>
             <p>Keycloak Client Secret: ${process.env.KEYCLOAK_CLIENT_SECRET}</p>
+            <p>Keycloak Public Key: ${process.env.KEYCLOAK_REALM_PUBLIC_KEY}</p>
+            <p>State: ${JSON.stringify(params)}</p>
 
             <div>
                 <h2>Keycloak Actions</h2>
@@ -220,6 +234,13 @@ function buildPage(params) {
                 <br />
                 <div>
                     ${logoutButton}
+                </div>
+            </div>
+
+            <div>
+                <h2> Endpoint </h2>
+                <div>
+                    <a href="/private/">/private</a>
                 </div>
             </div>
         </body>
