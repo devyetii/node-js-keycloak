@@ -147,6 +147,19 @@ app.get('/get-user-info', (req, res) => {
     })
 })
 
+app.get('/register', (req, res) => {
+    const url = new URL(
+        `${process.env.KEYCLOAK_BASE}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/registrations`
+    );
+    url.searchParams.append('client_id', process.env.KEYCLOAK_CLIENT_ID);
+    url.searchParams.append('redirect_uri', `http://localhost:${process.env.PORT}/callback`);
+    url.searchParams.append('response_type', 'code');
+    url.searchParams.append('scope', 'openid');
+    url.searchParams.append('state', JSON.stringify(req.query));
+
+    res.redirect(url);
+})
+
 app.get('/logout', (req, res) => {
     const client_id = process.env.KEYCLOAK_CLIENT_ID;
     const redirect_uri = `http://localhost:${process.env.PORT}/`;
@@ -186,6 +199,7 @@ app.listen(process.env.PORT, () => {
 
 function buildPage(params) {
     const loginButton = `<button onclick="window.location.href = '/login?redirect=/';">Login</button>`;
+    const registerButton = `<button onclick="window.location.href = '/register';">Register</button>`;
     const codeView = `<p>Code: ${params.code}</p>`;
     const accessTokenGetButton = `<button onclick="window.location.href = '/get-access-token';" ${params.code ? "" : "disabled"}>Get Access Token</button>`;
     const accessTokenView = `<p>Access Token: ${params.access_token}</p>`;
@@ -215,7 +229,7 @@ function buildPage(params) {
             <div>
                 <h2>Keycloak Actions</h2>
                 <div>
-                    ${params.code ? codeView : loginButton}
+                    ${params.code ? codeView : loginButton + "&nbsp;" + registerButton}
                 </div>
                 <br />
                 <div>
