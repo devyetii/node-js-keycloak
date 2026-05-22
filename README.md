@@ -13,7 +13,7 @@ This project demonstrates the raw [OpenID Connect / OAuth 2.0 Authorization Code
 - **Token Introspection** — Validates access tokens via Keycloak's introspection endpoint.
 - **User Info Retrieval** — Fetches user details from Keycloak's UserInfo endpoint using the access token.
 - **JWT Route Protection** — A custom Express middleware in `private/routes.js` verifies the access token locally using the realm's public key (`jsonwebtoken`).
-- **In-Memory Session State** — Simple state module for demo purposes (see ⚠️ Caveats).
+- **In-Memory Session State** — Simple state module for demo purposes (see Improvement Plan).
 
 ---
 
@@ -161,14 +161,16 @@ Visit the home page to see available actions and current state.
 
 ---
 
-## ⚠️ Caveats & Security Notes
+## Improvement Plan
 
-1. **In-Memory State** — `state.js` stores session data in a plain JavaScript object. This is **not suitable for production** (data is lost on restart and does not scale across instances). Replace with Redis, a database, or signed cookies.
-2. **No HTTPS** — The demo runs on plain HTTP (`localhost`). Always use HTTPS in production to protect tokens in transit.
-3. **Client Secret Exposure** — The `.env` file contains sensitive credentials. **Never commit `.env` to version control** (ensure it is in `.gitignore`).
-4. **State Parameter** — The current implementation passes `state` during login but does not validate it in the callback, which could make the app vulnerable to CSRF. In production, generate and verify a cryptographically random `state` value.
-5. **PKCE** — This demo does not implement [PKCE](https://oauth.net/2/pkce/), which is recommended for public clients and increasingly required for confidential clients as well.
-6. **Token Storage** — Tokens are held in server memory. For browser-based sessions, consider using secure, `HttpOnly` cookies instead of exposing tokens to the frontend.
+The following enhancements are planned to evolve this demo into a production-grade implementation:
+
+1. **Persistent Session Store** — The current `state.js` module uses a plain in-memory JavaScript object for simplicity. This will be enhanced to use Redis, a database, or signed cookies to support persistence across restarts and horizontal scaling.
+2. **HTTPS Support** — The app currently runs on plain HTTP for local development. Production deployment will include TLS/HTTPS configuration to protect tokens in transit.
+3. **Environment Management** — `.env` handling will be hardened with `.env` already kept out of version control via `.gitignore`, and secrets management will be enhanced using a dedicated secrets manager or encrypted vault.
+4. **CSRF Protection (State Parameter)** — The current login flow passes a `state` parameter but does not validate it in the callback. This will be enhanced by generating and verifying a cryptographically random `state` value to prevent CSRF attacks.
+5. **PKCE Extension** — Support for [PKCE](https://oauth.net/2/pkce/) will be added to strengthen the authorization code exchange, aligning with modern OAuth 2.0 security best practices.
+6. **Secure Token Storage** — Tokens are currently held in server memory for easy introspection. The implementation will be enhanced to use secure, `HttpOnly` cookies for browser-based sessions, reducing token exposure on the frontend.
 
 ---
 
